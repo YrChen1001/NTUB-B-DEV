@@ -78,6 +78,11 @@ jobs:
             npm ci
             VITE_API_BASE_URL=/api npm run build
 
+            # 將前端打包結果同步到 Nginx 根目錄（/frontend）
+            rm -rf ${{ secrets.EC2_APP_DIR }}/frontend
+            mkdir -p ${{ secrets.EC2_APP_DIR }}/frontend
+            cp -r dist/* ${{ secrets.EC2_APP_DIR }}/frontend/
+
             cd ${{ secrets.EC2_APP_DIR }}
             pm2 describe ntub-backend >/dev/null 2>&1 && \
               pm2 restart ntub-backend || \
