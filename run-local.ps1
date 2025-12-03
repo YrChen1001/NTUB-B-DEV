@@ -5,6 +5,30 @@ $ErrorActionPreference = "Stop"
 # Project root (this script's directory)
 $RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
+#################################
+# 0. Safety: Check if ports 3000 / 4000 are already in use
+#################################
+function Test-PortInUse {
+    param([int]$Port)
+    $pattern = "[:\.]$Port\s"
+    $lines = netstat -ano -p TCP 2>$null | Select-String $pattern
+    return $null -ne $lines
+}
+
+$BackendPort  = 4000
+$FrontendPort = 3000
+
+$backendBusy  = Test-PortInUse -Port $BackendPort
+$frontendBusy = Test-PortInUse -Port $FrontendPort
+
+if ($backendBusy -or $frontendBusy) {
+    Write-Host "A development server is already running. Startup aborted:" -ForegroundColor Yellow
+    if ($backendBusy)  { Write-Host " - Backend port $BackendPort is in use."  -ForegroundColor Yellow }
+    if ($frontendBusy) { Write-Host " - Frontend port $FrontendPort is in use." -ForegroundColor Yellow }
+    Write-Host "Please close the existing dev server windows or kill the related node processes." -ForegroundColor Red
+    exit 1
+}
+
 Write-Host "=== NTUB-B local one-click start (Windows) ===`n"
 
 #################################
@@ -52,34 +76,30 @@ if (-not (Test-Path "node_modules")) {
 #################################
 Write-Host "[3/3] Starting backend and frontend dev servers..."
 
-$backendDir = Join-Path $RootDir "Backend"
-$frontendDir = Join-Path $RootDir "Frontend"
-
 Set-Location $RootDir
 
 $backendProc  = $null
 $frontendProc = $null
 
 try {
-    # Start backend dev server in a new PowerShell window
+    # Backend powershell window
     $backendProc = Start-Process -FilePath "powershell" `
         -ArgumentList "-NoExit", "-Command", "Set-Location `"$backendDir`"; npm run dev" `
         -PassThru
 
-    # Start frontend dev server in a new PowerShell window
+    # Frontend powershell window
     $frontendProc = Start-Process -FilePath "powershell" `
         -ArgumentList "-NoExit", "-Command", "Set-Location `"$frontendDir`"; npm run dev" `
         -PassThru
 
     Write-Host ""
-    Write-Host "Backend  PID : $($backendProc.Id)"
-    Write-Host "Frontend PID : $($frontendProc.Id)"
+    Write-Host ("Backend  PID : {0}"  -f $backendProc.Id)
+    Write-Host ("Frontend PID : {0}" -f $frontendProc.Id)
     Write-Host ""
 
-    #####################################################
-    # 4. Launch Chrome kiosk app (Frontend @ port 3000)
-    #    Chrome 僅啟動，不參與後續「連動關閉」邏輯
-    #####################################################
+    #################################
+    # 4. Launch Chrome in app/kiosk mode (Frontend @ port 3000)
+    #################################
     $chromeCandidates = @(
         "C:\Program Files\Google\Chrome\Application\chrome.exe",
         "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
@@ -94,49 +114,44 @@ try {
     }
 
     if ($chrome -eq $null) {
-        Write-Host "WARNING: Google Chrome not found. Skipping kiosk launch." -ForegroundColor Yellow
+        Write-Host "WARNING: Chrome not found. Skipping kiosk launch." -ForegroundColor Yellow
     } else {
         $kioskUrl = "http://localhost:3000"
         Write-Host "Launching Chrome kiosk window at: $kioskUrl"
-
-        # 你可以視需要改成只最大化：
-        #   --start-maximized --app=$kioskUrl
         Start-Process $chrome "--kiosk --kiosk-printing --start-maximized --app=$kioskUrl"
     }
 
-    #####################################################
-    # 5. 監控 Backend / Frontend 視窗：
-    #    只要任一個關閉，就結束另一個並退出本腳本
-    #####################################################
+    #################################
+    # 5. Monitoring:
+    #    If user closes EITHER backend or frontend window:
+    #    → stop the other one, exit this script, Chrome stays open
+    #################################
     Write-Host ""
-    Write-Host "Backend / Frontend dev servers are running."
-    Write-Host "Close EITHER backend or frontend PowerShell window to stop everything."
+    Write-Host "Both dev servers are running."
+    Write-Host "Close ANY backend or frontend PowerShell window to stop everything."
 
     while ($true) {
         $backendAlive  = ($backendProc  -ne $null -and -not $backendProc.HasExited)
         $frontendAlive = ($frontendProc -ne $null -and -not $frontendProc.HasExited)
 
-        # 若任一邊已經不在，就跳出迴圈，進入 finally 做清理
+        # Exit when EITHER window is closed
         if (-not $backendAlive -or -not $frontendAlive) {
             break
         }
 
         Start-Sleep -Seconds 1
     }
-}
-finally {
+
+} finally {
+
     Write-Host ""
-    Write-Host "Cleaning up dev server processes (if still running)..."
+    Write-Host "Stopping dev servers..."
 
     foreach ($p in @($backendProc, $frontendProc)) {
         if ($null -ne $p -and -not $p.HasExited) {
-            try {
-                $p.Kill()
-            } catch {
-                # ignore any errors when killing processes
-            }
+            try { $p.Kill() } catch {}
         }
     }
 
-    Write-Host "Cleanup finished."
+    Write-Host "Cleanup complete."
 }
