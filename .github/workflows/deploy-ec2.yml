@@ -36,31 +36,29 @@ jobs:
         working-directory: ./Frontend
         run: VITE_API_BASE_URL=/api npm run build
 
-      # Copy Backend build + package files to EC2: Backend/dist -> <EC2_APP_DIR>/backend
-      - name: Copy Backend build to EC2
+      # Copy Backend source to EC2: Backend -> <EC2_APP_DIR>/Backend
+      - name: Copy Backend project to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           source: |
-            Backend/dist/*
-            Backend/package.json
-            Backend/package-lock.json
-          target: ${{ secrets.EC2_APP_DIR }}/backend
-          strip_components: 1
+            Backend/**
+          target: ${{ secrets.EC2_APP_DIR }}
+          strip_components: 0
 
-      # Copy Frontend build to EC2: Frontend/dist -> <EC2_APP_DIR>/frontend
-      - name: Copy Frontend build to EC2
+      # Copy Frontend source to EC2: Frontend -> <EC2_APP_DIR>/Frontend
+      - name: Copy Frontend project to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           source: |
-            Frontend/dist/*
-          target: ${{ secrets.EC2_APP_DIR }}/frontend
-          strip_components: 1
+            Frontend/**
+          target: ${{ secrets.EC2_APP_DIR }}
+          strip_components: 0
 
       # Restart Backend on EC2 via pm2
       - name: Restart Backend on EC2
@@ -70,14 +68,20 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # 安裝/更新 Backend 依賴（僅安裝 production 依賴）
-            cd ${{ secrets.EC2_APP_DIR }}/backend
+            # 在 EC2 上安裝/更新 Backend 依賴並 build
+            cd ${{ secrets.EC2_APP_DIR }}/Backend
             npm ci --omit=dev
+            npm run build
+
+            # 在 EC2 上安裝/更新 Frontend 依賴並 build（API base = /api）
+            cd ${{ secrets.EC2_APP_DIR }}/Frontend
+            npm ci
+            VITE_API_BASE_URL=/api npm run build
 
             cd ${{ secrets.EC2_APP_DIR }}
             pm2 describe ntub-backend >/dev/null 2>&1 && \
               pm2 restart ntub-backend || \
-              pm2 start backend/server.js --name ntub-backend
+              pm2 start Backend/dist/server.js --name ntub-backend
             pm2 save
 
 
