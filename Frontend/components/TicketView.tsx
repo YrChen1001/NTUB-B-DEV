@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { PrintJob } from '../types';
+
+const PRINT_API_BASE =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api';
 import { CheckCircle, Printer, Sparkles } from 'lucide-react';
 
 interface TicketViewProps {
@@ -17,7 +20,7 @@ export const TicketView: React.FC<TicketViewProps> = ({ job, onComplete }) => {
     const timer = setTimeout(() => {
       const sendPrintJob = async () => {
         try {
-          const res = await fetch('http://localhost:4000/api/print-jobs', {
+          const res = await fetch(`${PRINT_API_BASE}/print-jobs`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

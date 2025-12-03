@@ -6,8 +6,8 @@ const KEYS = {
 };
 
 // 後端 API base
-// - 本機開發: 預設 http://localhost:4000/api
-// - 部署到伺服器: 透過 VITE_API_BASE_URL 環境變數指定，例如 https://your-backend.com/api
+// - 部署時由 VITE_API_BASE_URL 提供（例如 /api 或 https://your-backend.com/api）
+// - 本機開發時若未設定，預設為 http://localhost:4000/api
 const API_BASE =
   (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
   'http://localhost:4000/api';

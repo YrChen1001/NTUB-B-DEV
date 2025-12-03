@@ -1,6 +1,7 @@
 import { PrinterSettings, SystemPrinter } from '../types';
 
-const API_BASE = 'http://localhost:4000/api';
+const API_BASE =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api';
 
 export const getPrinterSettings = async (): Promise<PrinterSettings> => {
   const res = await fetch(`${API_BASE}/printer-settings`);
