@@ -34,7 +34,6 @@ router.post("/", (req, res) => {
     subtitle: body.subtitle,
     content: body.content ?? "",
     footer: body.footer,
-    price: body.price,
     imageUrl: body.imageUrl,
   };
 

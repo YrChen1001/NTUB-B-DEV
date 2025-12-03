@@ -39,7 +39,6 @@ export function initDb() {
       subtitle TEXT,
       content TEXT NOT NULL,
       footer TEXT,
-      price REAL,
       imageUrl TEXT,
       FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE CASCADE
     )
@@ -81,8 +80,8 @@ export function initDb() {
   insertCatsTx(DEFAULT_CATEGORIES);
 
   const insertItem = db.prepare(`
-    INSERT OR IGNORE INTO items (id, categoryId, title, subtitle, content, footer, price, imageUrl)
-    VALUES (@id, @categoryId, @title, @subtitle, @content, @footer, NULL, @imageUrl)
+    INSERT OR IGNORE INTO items (id, categoryId, title, subtitle, content, footer, imageUrl)
+    VALUES (@id, @categoryId, @title, @subtitle, @content, @footer, @imageUrl)
   `);
   const insertItemsTx = db.transaction((items: Item[]) => {
     for (const item of items) {

@@ -5,8 +5,12 @@ const KEYS = {
   ITEMS: 'kiosk_items'
 };
 
-// 後端 API base，開發時固定指向本機 Backend
-const API_BASE = 'http://localhost:4000/api';
+// 後端 API base
+// - 本機開發: 預設 http://localhost:4000/api
+// - 部署到伺服器: 透過 VITE_API_BASE_URL 環境變數指定，例如 https://your-backend.com/api
+const API_BASE =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
+  'http://localhost:4000/api';
 
 export const getCategories = async (): Promise<Category[]> => {
   try {

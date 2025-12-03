@@ -13,7 +13,6 @@ export function loadCategories(): Category[] {
 }
 
 export function loadItems(): Item[] {
-  // Removed price from selection, if the column exists it's fine, we just don't select it into the object type
   const rows = db
     .prepare<never, Item>(`
       SELECT id, categoryId, title, subtitle, content, footer, imageUrl
@@ -47,7 +46,6 @@ export function saveCategories(categories: Category[]) {
 export function saveItems(items: Item[]) {
   const tx = db.transaction((rows: Item[]) => {
     db.prepare(`DELETE FROM items`).run();
-    // Removed price from INSERT
     const stmt = db.prepare(`
       INSERT INTO items (id, categoryId, title, subtitle, content, footer, imageUrl)
       VALUES (@id, @categoryId, @title, @subtitle, @content, @footer, @imageUrl)

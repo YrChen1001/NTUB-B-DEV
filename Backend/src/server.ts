@@ -13,9 +13,17 @@ initDb();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-app.use(cors({
-  origin: ["http://localhost:3000"],
-}));
+const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS ??
+  "http://localhost:3000,http://127.0.0.1:3000")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: ALLOWED_ORIGINS,
+  })
+);
 app.use(express.json());
 
 app.get("/api/health", (_req, res) => {
