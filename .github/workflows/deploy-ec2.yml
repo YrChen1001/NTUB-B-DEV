@@ -1,0 +1,75 @@
+name: Deploy to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      # Build Backend
+      - name: Install Backend dependencies
+        working-directory: ./Backend
+        run: npm ci
+
+      - name: Build Backend
+        working-directory: ./Backend
+        run: npm run build
+
+      # Build Frontend
+      - name: Install Frontend dependencies
+        working-directory: ./Frontend
+        run: npm ci
+
+      - name: Build Frontend (API base = /api for Nginx reverse proxy)
+        working-directory: ./Frontend
+        run: VITE_API_BASE_URL=/api npm run build
+
+      # Copy Backend build to EC2: Backend/dist -> <EC2_APP_DIR>/backend
+      - name: Copy Backend build to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: Backend/dist/**
+          target: ${{ secrets.EC2_APP_DIR }}/backend
+          strip_components: 2
+
+      # Copy Frontend build to EC2: Frontend/dist -> <EC2_APP_DIR>/frontend
+      - name: Copy Frontend build to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: Frontend/dist/**
+          target: ${{ secrets.EC2_APP_DIR }}/frontend
+          strip_components: 2
+
+      # Restart Backend on EC2 via pm2
+      - name: Restart Backend on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ${{ secrets.EC2_APP_DIR }}
+            pm2 describe ntub-backend >/dev/null 2>&1 && \
+              pm2 restart ntub-backend || \
+              pm2 start backend/server.js --name ntub-backend
+            pm2 save
+
+

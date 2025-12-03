@@ -25,3 +25,7 @@ dist-ssr
 
 # Database
 *.db
+
+# SQLite extra files
+*.db-wal
+*.db-shm
