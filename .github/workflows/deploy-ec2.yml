@@ -43,12 +43,9 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: |
-            Backend/dist/**
-            Backend/package.json
-            Backend/package-lock.json
+          source: "Backend/dist Backend/package.json Backend/package-lock.json"
           target: ${{ secrets.EC2_APP_DIR }}/backend
-          strip_components: 2
+          strip_components: 1
 
       # Copy Frontend build to EC2: Frontend/dist -> <EC2_APP_DIR>/frontend
       - name: Copy Frontend build to EC2
@@ -57,9 +54,9 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: Frontend/dist/**
+          source: "Frontend/dist"
           target: ${{ secrets.EC2_APP_DIR }}/frontend
-          strip_components: 2
+          strip_components: 1
 
       # Restart Backend on EC2 via pm2
       - name: Restart Backend on EC2
