@@ -1,8 +1,14 @@
 declare module "better-sqlite3" {
+  export interface RunResult {
+    changes: number;
+    lastInsertRowid: number | bigint;
+  }
+
   export interface Statement<BindParameters = any[], Row = any> {
-    all(...params: BindParameters[]): Row[];
-    get(...params: BindParameters[]): Row | undefined;
-    run(...params: BindParameters[]): any;
+    // BindParameters 通常是陣列 (位置參數) 或物件 (具名參數)
+    all(...params: BindParameters): Row[];
+    get(...params: BindParameters): Row | undefined;
+    run(...params: BindParameters): RunResult;
   }
 
   export interface Database {

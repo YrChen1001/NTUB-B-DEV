@@ -9,12 +9,19 @@ const SETTINGS_ID = 1;
 
 export function getPrinterSettings(): PrinterSettings {
   const row = db
-    .prepare<never, PrinterSettings & { enabled: number }>(`
+    .prepare(`
       SELECT id, printerName, copies, enabled
       FROM printer_settings
       WHERE id = ?
     `)
-    .get(SETTINGS_ID);
+    .get(SETTINGS_ID) as
+    | {
+        id: number;
+        printerName: string | null;
+        copies: number | null;
+        enabled: number;
+      }
+    | undefined;
 
   if (!row) {
     return {
