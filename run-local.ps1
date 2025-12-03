@@ -75,11 +75,54 @@ try {
     Write-Host "Backend  PID : $($backendProc.Id)"
     Write-Host "Frontend PID : $($frontendProc.Id)"
     Write-Host ""
-    Write-Host "Two PowerShell windows have been started for backend and frontend."
-    Write-Host "Stop the dev servers or close those windows when you are done."
 
-    # Wait until one of the dev processes exits
-    Wait-Process -Id $backendProc.Id, $frontendProc.Id
+    #####################################################
+    # 4. Launch Chrome kiosk app (Frontend @ port 3000)
+    #    Chrome 僅啟動，不參與後續「連動關閉」邏輯
+    #####################################################
+    $chromeCandidates = @(
+        "C:\Program Files\Google\Chrome\Application\chrome.exe",
+        "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"
+    )
+
+    $chrome = $null
+    foreach ($path in $chromeCandidates) {
+        if (Test-Path $path) {
+            $chrome = $path
+            break
+        }
+    }
+
+    if ($chrome -eq $null) {
+        Write-Host "WARNING: Google Chrome not found. Skipping kiosk launch." -ForegroundColor Yellow
+    } else {
+        $kioskUrl = "http://localhost:3000"
+        Write-Host "Launching Chrome kiosk window at: $kioskUrl"
+
+        # 你可以視需要改成只最大化：
+        #   --start-maximized --app=$kioskUrl
+        Start-Process $chrome "--kiosk --kiosk-printing --start-maximized --app=$kioskUrl"
+    }
+
+    #####################################################
+    # 5. 監控 Backend / Frontend 視窗：
+    #    只要任一個關閉，就結束另一個並退出本腳本
+    #####################################################
+    Write-Host ""
+    Write-Host "Backend / Frontend dev servers are running."
+    Write-Host "Close EITHER backend or frontend PowerShell window to stop everything."
+
+    while ($true) {
+        $backendAlive  = ($backendProc  -ne $null -and -not $backendProc.HasExited)
+        $frontendAlive = ($frontendProc -ne $null -and -not $frontendProc.HasExited)
+
+        # 若任一邊已經不在，就跳出迴圈，進入 finally 做清理
+        if (-not $backendAlive -or -not $frontendAlive) {
+            break
+        }
+
+        Start-Sleep -Seconds 1
+    }
 }
 finally {
     Write-Host ""

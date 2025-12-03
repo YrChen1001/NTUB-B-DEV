@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { PrintJob } from '../types';
-
-const PRINT_API_BASE =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api';
 import { CheckCircle, Printer, Sparkles } from 'lucide-react';
+
+// 與其他 API 呼叫一致
+const PRINT_API_BASE =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
+  'http://localhost:4000/api';
 
 interface TicketViewProps {
   job: PrintJob;
