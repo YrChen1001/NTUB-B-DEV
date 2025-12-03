@@ -3,23 +3,27 @@ import { db } from "./db";
 
 export function loadCategories(): Category[] {
   const rows = db
-    .prepare<never, Category>(`
+    .prepare(
+      `
       SELECT id, name, description, icon, color
       FROM categories
       ORDER BY id
-    `)
-    .all();
+    `
+    )
+    .all() as Category[];
   return rows;
 }
 
 export function loadItems(): Item[] {
   const rows = db
-    .prepare<never, Item>(`
+    .prepare(
+      `
       SELECT id, categoryId, title, subtitle, content, footer, imageUrl
       FROM items
       ORDER BY id
-    `)
-    .all();
+    `
+    )
+    .all() as Item[];
   return rows;
 }
 
