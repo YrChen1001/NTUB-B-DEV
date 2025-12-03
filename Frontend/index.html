@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KioskMaster Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: '#2563eb',
+              secondary: '#475569',
+              accent: '#f59e0b',
+              mystic: {
+                dark: '#0f172a',
+                card: '#1e293b',
+                gold: '#fbbf24',
+                glow: '#818cf8'
+              }
+            },
+            fontFamily: {
+              serif: ['Georgia', 'Cambria', '"Times New Roman"', 'Times', 'serif'],
+              sans: ['ui-sans-serif', 'system-ui', 'sans-serif'],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      @media print {
+        body * {
+          visibility: hidden;
+        }
+        #print-area, #print-area * {
+          visibility: visible;
+        }
+        #print-area {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+        }
+      }
+
+      /* Hide scrollbar */
+      .no-scrollbar::-webkit-scrollbar {
+          display: none;
+      }
+      .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+      }
+
+      .perspective-1000 {
+        perspective: 1000px;
+      }
+      
+      /* Glassmorphism Utilities */
+      .glass-shard {
+        background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.01));
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.15);
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36);
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "framer-motion": "https://aistudiocdn.com/framer-motion@^11.0.28",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
+  }
+}
+</script>
+</head>
+  <body class="bg-slate-950 text-slate-100 select-none overflow-hidden">
+    <div id="root"></div>
+    <!-- Vite React 入口，掛載 index.tsx -->
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,5 @@
+{
+  "name": "KioskMaster Pro",
+  "description": "一個可自定義的雙層 Kiosk 系統，適用於菜單、票券和占卜，具有 AI 內容生成功能。",
+  "requestFramePermissions": []
+}
