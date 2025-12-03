@@ -2,55 +2,65 @@ Param()
 
 $ErrorActionPreference = "Stop"
 
+$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$targetDir  = Join-Path $ScriptRoot "..\NTUB-B-DEV"
+
 $repoUrl   = "https://github.com/Yrchen1001/NTUB-B-DEV.git"
-$targetDir = Join-Path $env:USERPROFILE "NTUB-B-DEV"
 
-Write-Host "=== NTUB-B 一鍵安裝與啟動 (Windows) ===`n"
+Write-Host "=== NTUB-B setup and run (Windows) ==="
 
-##########################
-# 0. 檢查必要工具
-##########################
-
+# 0. Check required tools
 $required = @("git", "node", "npm")
 foreach ($cmd in $required) {
-  if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
-    Write-Host "錯誤：找不到指令 '$cmd'，請先安裝 $cmd 後再執行本腳本。" -ForegroundColor Red
-    exit 1
-  }
+    if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
+        Write-Host "ERROR: Command not found: $cmd" -ForegroundColor Red
+        exit 1
+    }
 }
 
-##########################
-# 1. 下載或更新專案程式碼
-##########################
+# 1. Clone or update repository
+$gitFolder = Join-Path $targetDir ".git"
 
-if (-not (Test-Path (Join-Path $targetDir ".git"))) {
-  Write-Host "[1/3] 下載專案程式碼到 $targetDir ..."
-  git clone $repoUrl $targetDir
-} else {
-  Write-Host "[1/3] 專案已存在於 $targetDir，執行 git pull 更新..."
-  Set-Location $targetDir
-  try {
+if (-not (Test-Path $gitFolder)) {
+    Write-Host "[1/3] Cloning repository to $targetDir ..."
+    git clone $repoUrl $targetDir
+
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $gitFolder)) {
+        Write-Host "ERROR: git clone failed." -ForegroundColor Red
+        exit 1
+    }
+}
+else {
+    Write-Host "[1/3] Repository already exists. Running git pull ..."
+    Set-Location $targetDir
     git pull --ff-only
-  } catch {
-    Write-Host "git pull 失敗，請手動檢查後再重試。" -ForegroundColor Yellow
-  }
+}
+
+# 2. Change directory to target
+if (-not (Test-Path $targetDir)) {
+    Write-Host "ERROR: Target path does not exist: $targetDir" -ForegroundColor Red
+    exit 1
 }
 
 Set-Location $targetDir
 
-##########################
-# 2. 呼叫本機啟動腳本
-##########################
-
+# 3. Run local startup script
 $runLocal = Join-Path $targetDir "run-local.ps1"
+
 if (-not (Test-Path $runLocal)) {
-  Write-Host "錯誤：找不到 run-local.ps1，請確認專案完整性。" -ForegroundColor Red
-  exit 1
+    Write-Host "ERROR: run-local.ps1 not found." -ForegroundColor Red
+    exit 1
 }
 
-Write-Host "[2/3] 準備並啟動 Backend / Frontend ..."
-Write-Host ""
+Write-Host "[2/3] Running run-local.ps1 ..."
 
-& $runLocal
+try {
+    & $runLocal
+}
+catch {
+    Write-Host "ERROR: run-local.ps1 execution failed." -ForegroundColor Red
+    Write-Host $_.Exception.Message -ForegroundColor DarkRed
+    exit 1
+}
 
-
+Write-Host "[3/3] All steps finished."
