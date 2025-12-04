@@ -89,17 +89,31 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
   const fileName = `arcana-ticket-${Date.now()}.txt`;
   const filePath = path.join(tmpDir, fileName);
 
+  // --- 票券排版（純文字版面，盡量在各種印表機上維持清晰）---
+  const border = "==============================";
+  const numberLine = `號碼：${String(job.queueNumber).padStart(3, "0")}`;
+  const headerTitle = job.item.title || "標題";
+  const headerSubtitle = job.item.subtitle ? `(${job.item.subtitle})` : "";
+
   const lines = [
+    border,
+    "        NTUB B-KIOSK",
+    border,
+    "",
     `【${job.categoryName}】`,
+    numberLine,
     `時間：${job.timestamp}`,
-    `號碼：${String(job.queueNumber).padStart(3, "0")}`,
     "",
-    `標題：${job.item.title}`,
-    job.item.subtitle ? `副標題：${job.item.subtitle}` : "",
+    `標題：${headerTitle}`,
+    headerSubtitle,
     "",
+    "—— 內容 ——",
     job.item.content,
     "",
     job.item.footer ? `*** ${job.item.footer} ***` : "",
+    border,
+    "         感謝您的使用",
+    border,
     "",
   ]
     .filter(Boolean)
@@ -124,7 +138,7 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
         $path = '${psPath}';
         $copies = ${copies};
         1..$copies | ForEach-Object {
-          Get-Content -Path $path | Out-Printer -Name $printer
+          Get-Content -Path $path -Encoding UTF8 | Out-Printer -Name $printer
         }
       `;
 
