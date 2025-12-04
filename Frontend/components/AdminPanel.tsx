@@ -118,7 +118,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       }
     } catch (e) {
       console.error(e);
-      setPrinterError('偵測印表機失敗，請確認系統是否安裝 CUPS / lpstat');
+      setPrinterError('偵測印表機失敗，請確認系統已安裝印表機且後端可存取列印功能（macOS 需有 CUPS / lpstat，Windows 需可使用 PowerShell Get-Printer）。');
     } finally {
       setIsLoadingPrintersList(false);
     }
@@ -577,7 +577,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       />
                     </div>
                     <p className="mt-1 text-[11px] text-slate-400">
-                      名稱需與系統 `lpstat -p` 顯示的佇列名稱相同，例如：`POS_Printer`。
+                      名稱需與作業系統中設定的印表機佇列名稱相同，例如：macOS 可用 `lpstat -p` 或系統設定檢視，Windows 可在 PowerShell `Get-Printer` 中查看。
                     </p>
                   </div>
                   <div>
@@ -620,7 +620,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     {isLoadingPrintersList ? '偵測中...' : '重新偵測系統印表機'}
                   </button>
                   <span className="text-[11px] text-slate-400">
-                    偵測需要系統已安裝 CUPS / lpstat，且裝置已開機連線。
+                    偵測需要系統已正確安裝印表機且裝置已開機連線（macOS：CUPS / lpstat；Windows：PowerShell Get-Printer）。
                   </span>
                 </div>
 
@@ -630,7 +630,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div>
                       <div>目前系統未偵測到任何印表機。</div>
                       <div className="mt-0.5">
-                        請先在 macOS「系統設定 &gt; 印表機與掃描器」中加入印表機，或確認 CUPS 服務已啟動，然後點擊「重新偵測系統印表機」。
+                        請先在作業系統的「印表機與掃描器」設定中加入印表機（macOS / Windows 皆可），並確認列印服務已啟動，然後點擊「重新偵測系統印表機」。
                       </div>
                     </div>
                   </div>
