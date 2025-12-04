@@ -7,6 +7,39 @@ import { PrintJob, PrinterSettings } from "../models/types";
 
 const SETTINGS_ID = 1;
 
+// --- 列印版面輔助：固定寬度票券（預設 32 字元寬，適合一般熱感紙 / 文書印表機）---
+const TICKET_WIDTH = 32;
+const INNER_WIDTH = TICKET_WIDTH - 2; // 扣掉左右邊框
+
+function centerText(text: string, width: number = INNER_WIDTH): string {
+  const raw = text ?? "";
+  if (raw.length >= width) return raw.slice(0, width);
+  const left = Math.floor((width - raw.length) / 2);
+  const right = width - raw.length - left;
+  return " ".repeat(left) + raw + " ".repeat(right);
+}
+
+function lineWithBorder(text: string = ""): string {
+  const raw = text ?? "";
+  const padded = raw.length > INNER_WIDTH ? raw.slice(0, INNER_WIDTH) : raw.padEnd(INNER_WIDTH, " ");
+  return `║${padded}║`;
+}
+
+function wrapTextLines(text: string, width: number = INNER_WIDTH): string[] {
+  const result: string[] = [];
+  if (!text) return result;
+  const paragraphs = text.split(/\r?\n/);
+  for (const para of paragraphs) {
+    let remaining = para;
+    while (remaining.length > width) {
+      result.push(remaining.slice(0, width));
+      remaining = remaining.slice(width);
+    }
+    result.push(remaining);
+  }
+  return result;
+}
+
 export function getPrinterSettings(): PrinterSettings {
   const row = db
     .prepare(`
@@ -89,31 +122,44 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
   const fileName = `arcana-ticket-${Date.now()}.txt`;
   const filePath = path.join(tmpDir, fileName);
 
-  // --- 票券排版（純文字版面，盡量在各種印表機上維持清晰）---
-  const border = "==============================";
-  const numberLine = `號碼：${String(job.queueNumber).padStart(3, "0")}`;
-  const headerTitle = job.item.title || "標題";
-  const headerSubtitle = job.item.subtitle ? `(${job.item.subtitle})` : "";
+  // --- 票券排版（精緻純文字版，適用 Windows / macOS 各種印表機）---
+  const topBorder = "╔" + "═".repeat(INNER_WIDTH) + "╗";
+  const midBorder = "╟" + "─".repeat(INNER_WIDTH) + "╢";
+  const bottomBorder = "╚" + "═".repeat(INNER_WIDTH) + "╝";
+
+  const qNumber = String(job.queueNumber).padStart(3, "0");
+  const prettyTime = job.timestamp.replace("T", " ").slice(0, 16); // 2025-12-04 12:34
+
+  const contentLines: string[] = [];
+  for (const l of wrapTextLines(job.item.content, INNER_WIDTH)) {
+    contentLines.push(lineWithBorder(l));
+  }
+
+  const footerLines: string[] = [];
+  if (job.item.footer) {
+    for (const l of wrapTextLines(job.item.footer, INNER_WIDTH)) {
+      footerLines.push(lineWithBorder(centerText(l)));
+    }
+  }
 
   const lines = [
-    border,
-    "        NTUB B-KIOSK",
-    border,
-    "",
-    `【${job.categoryName}】`,
-    numberLine,
-    `時間：${job.timestamp}`,
-    "",
-    `標題：${headerTitle}`,
-    headerSubtitle,
-    "",
-    "—— 內容 ——",
-    job.item.content,
-    "",
-    job.item.footer ? `*** ${job.item.footer} ***` : "",
-    border,
-    "         感謝您的使用",
-    border,
+    topBorder,
+    lineWithBorder(centerText("NTUB B-KIOSK")),
+    lineWithBorder(centerText("占卜票券 / Ticket")),
+    midBorder,
+    lineWithBorder(`類別：${job.categoryName}`),
+    lineWithBorder(`號碼：${qNumber}`),
+    lineWithBorder(`時間：${prettyTime}`),
+    midBorder,
+    lineWithBorder(`標題：${job.item.title || "標題"}`),
+    job.item.subtitle ? lineWithBorder(`副標：${job.item.subtitle}`) : "",
+    midBorder,
+    lineWithBorder(centerText("指引內容")),
+    ...contentLines,
+    midBorder,
+    ...footerLines,
+    lineWithBorder(centerText("感謝您的使用")),
+    bottomBorder,
     "",
   ]
     .filter(Boolean)
