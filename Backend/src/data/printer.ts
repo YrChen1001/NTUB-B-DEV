@@ -9,30 +9,29 @@ import { PrintJob, PrinterSettings } from "../models/types";
 const SETTINGS_ID = 1;
 
 // --- 票券排版（精美網頁版）---
-// 這裡將 HTML/CSS 寫在變數中，實際使用 puppeteer 渲染並列印
 function generateHtml(job: PrintJob): string {
   const qNumber = String(job.queueNumber).padStart(3, "0");
   const prettyTime = job.timestamp.replace("T", " ").slice(0, 16);
   
-  // 現代簡約風格 CSS
   const css = `
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
     
     @page {
       margin: 0;
-      size: 80mm auto; /* 預設熱感紙寬度，可自動延伸長度 */
+      size: 80mm auto;
     }
     
     body {
       margin: 0;
-      padding: 20px;
+      padding: 0; /* 圖片截圖需要滿版 */
       font-family: 'Noto Serif TC', serif;
       font-size: 14px;
       line-height: 1.6;
       color: #333;
       background: #fff;
-      width: 80mm; /* 模擬寬度 */
+      width: 80mm;
       box-sizing: border-box;
+      display: inline-block; /* 讓截圖寬度正確 */
     }
 
     .container {
@@ -40,11 +39,11 @@ function generateHtml(job: PrintJob): string {
       flex-direction: column;
       align-items: center;
       border: 2px solid #333;
+      margin: 10px;
       padding: 15px;
       position: relative;
     }
 
-    /* 內框線裝飾 */
     .container::before {
       content: "";
       position: absolute;
@@ -120,7 +119,7 @@ function generateHtml(job: PrintJob): string {
     .content {
       text-align: justify;
       margin-bottom: 25px;
-      white-space: pre-wrap; /* 保留換行 */
+      white-space: pre-wrap;
       width: 100%;
       font-size: 13px;
     }
@@ -270,93 +269,115 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
     });
   }
 
-  // 使用 puppeteer 產生 PDF
   return new Promise(async (resolve) => {
     let browser;
+    const isWindows = process.platform === "win32";
     const tmpDir = os.tmpdir();
-    const pdfPath = path.join(tmpDir, `ticket-${Date.now()}.pdf`);
+    
+    // Windows 改用 PNG 截圖列印
+    const outputExt = isWindows ? "png" : "pdf";
+    const outputPath = path.join(tmpDir, `ticket-${Date.now()}.${outputExt}`);
 
     try {
-      // 啟動瀏覽器
       browser = await puppeteer.launch({
         headless: true,
         args: ["--no-sandbox", "--disable-setuid-sandbox"],
       });
       const page = await browser.newPage();
       
-      // 設定 HTML 內容
       const htmlContent = generateHtml(job);
       await page.setContent(htmlContent, { waitUntil: "networkidle0" });
 
-      // 產生 PDF（寬度 80mm，長度自動）
-      await page.pdf({
-        path: pdfPath,
-        width: "80mm",
-        printBackground: true,
-        margin: { top: "0", right: "0", bottom: "0", left: "0" },
-      });
+      if (isWindows) {
+        // Windows: 截圖為 PNG（必須設定 viewport 寬度以確保排版正確）
+        await page.setViewport({ width: 320, height: 800, deviceScaleFactor: 2 }); // 320px ~= 80mm
+        // 取得 body 的高度
+        const bodyHandle = await page.$('body');
+        const { height } = await bodyHandle!.boundingBox() as any;
+        await bodyHandle!.dispose();
+        
+        await page.setViewport({ width: 320, height: Math.ceil(height), deviceScaleFactor: 2 });
+        await page.screenshot({ path: outputPath, fullPage: true });
+      } else {
+        // macOS / Linux: 產生 PDF
+        await page.pdf({
+          path: outputPath,
+          width: "80mm",
+          printBackground: true,
+          margin: { top: "0", right: "0", bottom: "0", left: "0" },
+        });
+      }
 
       await browser.close();
       browser = null;
 
-      // 接著送交 PDF 給印表機
-      const isWindows = process.platform === "win32";
       const cleanup = () => {
-         fs.unlink(pdfPath, () => {});
+         fs.unlink(outputPath, () => {});
       };
 
       if (isWindows) {
-        // Windows: 使用 PowerShell 呼叫預設關聯程式列印或 Adobe Reader，比較麻煩
-        // 為了通用，我們這裡改用產生圖片或維持 PDF。
-        // 不過 Windows 原生沒有簡單的 PDF 命令行列印工具。
-        // 如果要最簡單，我們可以使用 SumatraPDF CLI (如果有的話)，或者改為產生 PNG 圖片給 mspaint / Out-Printer (但 Out-Printer 不吃圖片)。
-        // 
-        // 這裡採用一個通用的解法：既然我們裝了 puppeteer，我們其實可以截圖成 PNG，然後用 PowerShell Start-Process -Verb Print
-        // 但是 Windows 的 "Print" verb 通常會跳出對話框或依賴看圖軟體。
-        //
-        // 替代方案：在 Windows 上，我們不要印 PDF，我們改為產生一個非常漂亮的純文字版 (Fallback) 
-        // 或是我們假設使用者裝了 SumatraPDF。
-        // 
-        // 為了確保「現在」就能動，我們在 Windows 上還是使用「優化的文字版」或嘗試呼叫 PDF 列印（如果系統支援）。
-        // 但既然你要求「精美」，文字版不夠。
-        // 
-        // 讓我們嘗試用 PDFtoPrinter (需下載) 或者直接用 Edge 列印 PDF？
-        // PowerShell 可以呼叫 Start-Process -FilePath "xxx.pdf" -Verb Print 
-        // 這會使用預設 PDF 閱讀器列印。通常是 Edge 或 Acrobat。
+        // Windows: 使用 PowerShell System.Drawing 印圖
+        // 這不依賴任何外部程式，只依賴 .NET Framework (Windows 內建)
+        const printerName = settings.printerName.replace(/'/g, "''");
+        const imgPath = outputPath.replace(/'/g, "''");
         
         const psScript = `
-          Start-Process -FilePath "${pdfPath}" -Verb Print -PassThru | ForEach-Object {
-            $_.WaitForExit(10000) # 等待 10 秒讓它送出
+          Add-Type -AssemblyName System.Drawing
+          
+          $printDoc = New-Object System.Drawing.Printing.PrintDocument
+          $printDoc.PrinterSettings.PrinterName = '${printerName}'
+          
+          # 設定列印事件
+          $printDoc.add_PrintPage({
+            param($sender, $e)
+            
+            $img = [System.Drawing.Image]::FromFile('${imgPath}')
+            
+            # 計算縮放（適應紙張寬度，保持比例）
+            # 這裡假設印表機已設定好紙張大小 (如 80mm)，通常不需要縮放，直接印原始大小即可
+            # 若需強制縮放，可計算 $e.MarginBounds.Width / $img.Width
+            
+            # 直接繪製圖片 (X=0, Y=0)
+            $e.Graphics.DrawImage($img, 0, 0, $img.Width, $img.Height)
+            
+            $img.Dispose()
+            $e.HasMorePages = $false
+          })
+          
+          try {
+            $printDoc.Print()
+            Write-Output "SUCCESS"
+          } catch {
+            Write-Error $_.Exception.Message
           }
         `;
-        
-        // 備註：Windows 的 Verb Print 可能會短暫開啟 PDF 閱讀器視窗然後關閉（或不關閉）。
-        // 這是目前不依賴第三方 exe 最簡單的方法。
+
         execFile(
           "powershell.exe",
           ["-NoProfile", "-Command", psScript],
           (error, stdout, stderr) => {
-            // 不刪除檔案太快，以免列印程式還沒讀取
-            setTimeout(cleanup, 60000); 
+            setTimeout(cleanup, 10000); // 稍微晚點刪除，確保列印完成
             
-            if (error) {
-              console.error("[PRINT] Windows PDF Print error", error);
-               resolve({ success: false, message: "Windows PDF 列印啟動失敗" });
+            if (error || (stderr && !stderr.includes("SUCCESS"))) {
+              console.error("[PRINT] Windows Image Print error", error, stderr);
+              resolve({ 
+                success: false, 
+                message: "Windows 列印失敗，請確認印表機名稱正確且已連線。" 
+              });
             } else {
-               resolve({ success: true });
+              resolve({ success: true });
             }
           }
         );
 
       } else {
-        // macOS / Linux: lp 指令原生支援 PDF
+        // macOS / Linux: lp 印 PDF
         const args = [
           "-d",
           settings.printerName,
           "-n",
           String(settings.copies ?? 1),
-          // "-o", "fit-to-page", // 視情況
-          pdfPath,
+          outputPath,
         ];
 
         execFile("lp", args, (error, _stdout, stderr) => {
@@ -378,7 +399,7 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
       console.error("[PRINT] Puppeteer error", e);
       resolve({
         success: false,
-        message: "產生票券 PDF 時發生錯誤",
+        message: "產生票券影像時發生錯誤",
       });
     }
   });
