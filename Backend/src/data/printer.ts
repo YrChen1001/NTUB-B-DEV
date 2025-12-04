@@ -2,42 +2,194 @@ import { execFile } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import puppeteer from "puppeteer";
 import { db } from "./db";
 import { PrintJob, PrinterSettings } from "../models/types";
 
 const SETTINGS_ID = 1;
 
-// --- 列印版面輔助：固定寬度票券（預設 32 字元寬，適合一般熱感紙 / 文書印表機）---
-const TICKET_WIDTH = 32;
-const INNER_WIDTH = TICKET_WIDTH - 2; // 扣掉左右邊框
-
-function centerText(text: string, width: number = INNER_WIDTH): string {
-  const raw = text ?? "";
-  if (raw.length >= width) return raw.slice(0, width);
-  const left = Math.floor((width - raw.length) / 2);
-  const right = width - raw.length - left;
-  return " ".repeat(left) + raw + " ".repeat(right);
-}
-
-function lineWithBorder(text: string = ""): string {
-  const raw = text ?? "";
-  const padded = raw.length > INNER_WIDTH ? raw.slice(0, INNER_WIDTH) : raw.padEnd(INNER_WIDTH, " ");
-  return `║${padded}║`;
-}
-
-function wrapTextLines(text: string, width: number = INNER_WIDTH): string[] {
-  const result: string[] = [];
-  if (!text) return result;
-  const paragraphs = text.split(/\r?\n/);
-  for (const para of paragraphs) {
-    let remaining = para;
-    while (remaining.length > width) {
-      result.push(remaining.slice(0, width));
-      remaining = remaining.slice(width);
+// --- 票券排版（精美網頁版）---
+// 這裡將 HTML/CSS 寫在變數中，實際使用 puppeteer 渲染並列印
+function generateHtml(job: PrintJob): string {
+  const qNumber = String(job.queueNumber).padStart(3, "0");
+  const prettyTime = job.timestamp.replace("T", " ").slice(0, 16);
+  
+  // 現代簡約風格 CSS
+  const css = `
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
+    
+    @page {
+      margin: 0;
+      size: 80mm auto; /* 預設熱感紙寬度，可自動延伸長度 */
     }
-    result.push(remaining);
-  }
-  return result;
+    
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: 'Noto Serif TC', serif;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #333;
+      background: #fff;
+      width: 80mm; /* 模擬寬度 */
+      box-sizing: border-box;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      border: 2px solid #333;
+      padding: 15px;
+      position: relative;
+    }
+
+    /* 內框線裝飾 */
+    .container::before {
+      content: "";
+      position: absolute;
+      top: 4px; left: 4px; right: 4px; bottom: 4px;
+      border: 1px solid #999;
+      pointer-events: none;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 15px;
+      width: 100%;
+      border-bottom: 2px solid #333;
+      padding-bottom: 10px;
+    }
+
+    .brand {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      margin-bottom: 5px;
+    }
+
+    .sub-brand {
+      font-size: 10px;
+      text-transform: uppercase;
+      color: #666;
+    }
+
+    .meta {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      margin-bottom: 15px;
+      border-bottom: 1px dashed #ccc;
+      padding-bottom: 10px;
+    }
+
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .meta-label {
+      font-size: 10px;
+      color: #999;
+    }
+
+    .meta-value {
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .title-section {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      font-style: italic;
+      color: #555;
+    }
+
+    .content {
+      text-align: justify;
+      margin-bottom: 25px;
+      white-space: pre-wrap; /* 保留換行 */
+      width: 100%;
+      font-size: 13px;
+    }
+
+    .footer {
+      text-align: center;
+      font-size: 10px;
+      color: #666;
+      border-top: 1px solid #333;
+      padding-top: 10px;
+      width: 100%;
+    }
+
+    .footer-text {
+      margin-bottom: 5px;
+      font-weight: 700;
+    }
+    
+    .logo-text {
+      font-family: sans-serif;
+      font-size: 9px;
+      color: #aaa;
+      letter-spacing: 1px;
+    }
+  `;
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>${css}</style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="brand">NTUB B-KIOSK</div>
+            <div class="sub-brand">Divine Guidance Ticket</div>
+          </div>
+          
+          <div class="meta">
+            <div class="meta-item">
+              <span class="meta-label">NO.</span>
+              <span class="meta-value">${qNumber}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">CATEGORY</span>
+              <span class="meta-value">${job.categoryName}</span>
+            </div>
+          </div>
+
+          <div class="title-section">
+            <div class="title">${job.item.title || "無標題"}</div>
+            ${job.item.subtitle ? `<div class="subtitle">${job.item.subtitle}</div>` : ""}
+          </div>
+
+          <div class="content">
+            ${job.item.content}
+          </div>
+
+          <div class="footer">
+            ${job.item.footer ? `<div class="footer-text">${job.item.footer}</div>` : ""}
+            <div class="logo-text">DESIGNED BY NTUB B-KIOSK</div>
+            <div style="font-size: 9px; margin-top: 4px; color: #ccc;">${prettyTime}</div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
 }
 
 export function getPrinterSettings(): PrinterSettings {
@@ -118,137 +270,117 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
     });
   }
 
-  const tmpDir = os.tmpdir();
-  const fileName = `arcana-ticket-${Date.now()}.txt`;
-  const filePath = path.join(tmpDir, fileName);
+  // 使用 puppeteer 產生 PDF
+  return new Promise(async (resolve) => {
+    let browser;
+    const tmpDir = os.tmpdir();
+    const pdfPath = path.join(tmpDir, `ticket-${Date.now()}.pdf`);
 
-  // --- 票券排版（精緻純文字版，適用 Windows / macOS 各種印表機）---
-  const topBorder = "╔" + "═".repeat(INNER_WIDTH) + "╗";
-  const midBorder = "╟" + "─".repeat(INNER_WIDTH) + "╢";
-  const bottomBorder = "╚" + "═".repeat(INNER_WIDTH) + "╝";
+    try {
+      // 啟動瀏覽器
+      browser = await puppeteer.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      });
+      const page = await browser.newPage();
+      
+      // 設定 HTML 內容
+      const htmlContent = generateHtml(job);
+      await page.setContent(htmlContent, { waitUntil: "networkidle0" });
 
-  const qNumber = String(job.queueNumber).padStart(3, "0");
-  const prettyTime = job.timestamp.replace("T", " ").slice(0, 16); // 2025-12-04 12:34
+      // 產生 PDF（寬度 80mm，長度自動）
+      await page.pdf({
+        path: pdfPath,
+        width: "80mm",
+        printBackground: true,
+        margin: { top: "0", right: "0", bottom: "0", left: "0" },
+      });
 
-  const contentLines: string[] = [];
-  for (const l of wrapTextLines(job.item.content, INNER_WIDTH)) {
-    contentLines.push(lineWithBorder(l));
-  }
+      await browser.close();
+      browser = null;
 
-  const footerLines: string[] = [];
-  if (job.item.footer) {
-    for (const l of wrapTextLines(job.item.footer, INNER_WIDTH)) {
-      footerLines.push(lineWithBorder(centerText(l)));
-    }
-  }
+      // 接著送交 PDF 給印表機
+      const isWindows = process.platform === "win32";
+      const cleanup = () => {
+         fs.unlink(pdfPath, () => {});
+      };
 
-  const lines = [
-    topBorder,
-    lineWithBorder(centerText("NTUB B-KIOSK")),
-    lineWithBorder(centerText("占卜票券 / Ticket")),
-    midBorder,
-    lineWithBorder(`類別：${job.categoryName}`),
-    lineWithBorder(`號碼：${qNumber}`),
-    lineWithBorder(`時間：${prettyTime}`),
-    midBorder,
-    lineWithBorder(`標題：${job.item.title || "標題"}`),
-    job.item.subtitle ? lineWithBorder(`副標：${job.item.subtitle}`) : "",
-    midBorder,
-    lineWithBorder(centerText("指引內容")),
-    ...contentLines,
-    midBorder,
-    ...footerLines,
-    lineWithBorder(centerText("感謝您的使用")),
-    bottomBorder,
-    "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+      if (isWindows) {
+        // Windows: 使用 PowerShell 呼叫預設關聯程式列印或 Adobe Reader，比較麻煩
+        // 為了通用，我們這裡改用產生圖片或維持 PDF。
+        // 不過 Windows 原生沒有簡單的 PDF 命令行列印工具。
+        // 如果要最簡單，我們可以使用 SumatraPDF CLI (如果有的話)，或者改為產生 PNG 圖片給 mspaint / Out-Printer (但 Out-Printer 不吃圖片)。
+        // 
+        // 這裡採用一個通用的解法：既然我們裝了 puppeteer，我們其實可以截圖成 PNG，然後用 PowerShell Start-Process -Verb Print
+        // 但是 Windows 的 "Print" verb 通常會跳出對話框或依賴看圖軟體。
+        //
+        // 替代方案：在 Windows 上，我們不要印 PDF，我們改為產生一個非常漂亮的純文字版 (Fallback) 
+        // 或是我們假設使用者裝了 SumatraPDF。
+        // 
+        // 為了確保「現在」就能動，我們在 Windows 上還是使用「優化的文字版」或嘗試呼叫 PDF 列印（如果系統支援）。
+        // 但既然你要求「精美」，文字版不夠。
+        // 
+        // 讓我們嘗試用 PDFtoPrinter (需下載) 或者直接用 Edge 列印 PDF？
+        // PowerShell 可以呼叫 Start-Process -FilePath "xxx.pdf" -Verb Print 
+        // 這會使用預設 PDF 閱讀器列印。通常是 Edge 或 Acrobat。
+        
+        const psScript = `
+          Start-Process -FilePath "${pdfPath}" -Verb Print -PassThru | ForEach-Object {
+            $_.WaitForExit(10000) # 等待 10 秒讓它送出
+          }
+        `;
+        
+        // 備註：Windows 的 Verb Print 可能會短暫開啟 PDF 閱讀器視窗然後關閉（或不關閉）。
+        // 這是目前不依賴第三方 exe 最簡單的方法。
+        execFile(
+          "powershell.exe",
+          ["-NoProfile", "-Command", psScript],
+          (error, stdout, stderr) => {
+            // 不刪除檔案太快，以免列印程式還沒讀取
+            setTimeout(cleanup, 60000); 
+            
+            if (error) {
+              console.error("[PRINT] Windows PDF Print error", error);
+               resolve({ success: false, message: "Windows PDF 列印啟動失敗" });
+            } else {
+               resolve({ success: true });
+            }
+          }
+        );
 
-  fs.writeFileSync(filePath, lines, "utf-8");
+      } else {
+        // macOS / Linux: lp 指令原生支援 PDF
+        const args = [
+          "-d",
+          settings.printerName,
+          "-n",
+          String(settings.copies ?? 1),
+          // "-o", "fit-to-page", // 視情況
+          pdfPath,
+        ];
 
-  const isWindows = process.platform === "win32";
-
-  return new Promise((resolve) => {
-    const cleanup = () => {
-      fs.unlink(filePath, () => {});
-    };
-
-    // Windows：使用 PowerShell Out-Printer
-    if (isWindows) {
-      const copies = Math.max(1, settings.copies ?? 1);
-      const psPrinter = settings.printerName.replace(/'/g, "''");
-      const psPath = filePath.replace(/'/g, "''");
-      const psScript = `
-        $printer = '${psPrinter}';
-        $path = '${psPath}';
-        $copies = ${copies};
-        1..$copies | ForEach-Object {
-          Get-Content -Path $path -Encoding UTF8 | Out-Printer -Name $printer
-        }
-      `;
-
-      execFile(
-        "powershell.exe",
-        ["-NoProfile", "-Command", psScript],
-        (error, _stdout, stderr) => {
+        execFile("lp", args, (error, _stdout, stderr) => {
           cleanup();
-
           if (error) {
-            const rawMsg =
-              stderr?.toString().trim() ||
-              error.message ||
-              "送交印表機時發生錯誤（Windows）";
-
-            const friendlyMsg = error.message.includes("ENOENT")
-              ? "系統無法找到 PowerShell 列印指令（powershell.exe），請確認此機器為 Windows 並已安裝/啟用 PowerShell。"
-              : rawMsg;
-
-            console.error("[PRINT_JOB] PowerShell Out-Printer error", error, stderr);
+            console.error("[PRINT] lp error", error, stderr);
             resolve({
               success: false,
-              message: friendlyMsg,
+              message: stderr?.toString() || error.message,
             });
           } else {
             resolve({ success: true });
           }
-        }
-      );
-
-      return;
-    }
-
-    // macOS / Linux：沿用 lp 指令
-    const args = [
-      "-d",
-      settings.printerName,
-      "-n",
-      String(settings.copies ?? 1),
-      filePath,
-    ];
-
-    execFile("lp", args, (error, _stdout, stderr) => {
-      cleanup();
-
-      if (error) {
-        const rawMsg =
-          stderr?.toString().trim() ||
-          error.message ||
-          "送交印表機時發生錯誤";
-
-        const friendlyMsg = error.message.includes("ENOENT")
-          ? "系統無法找到 lp 列印指令，請確認此機器已安裝 CUPS（或類似列印系統）並且有 lp 指令。"
-          : rawMsg;
-
-        console.error("[PRINT_JOB] lp error", error, stderr);
-        resolve({
-          success: false,
-          message: friendlyMsg,
         });
-      } else {
-        resolve({ success: true });
       }
-    });
+
+    } catch (e) {
+      if (browser) await browser.close();
+      console.error("[PRINT] Puppeteer error", e);
+      resolve({
+        success: false,
+        message: "產生票券 PDF 時發生錯誤",
+      });
+    }
   });
 }
 
@@ -262,7 +394,7 @@ export function listSystemPrinters(): Promise<SystemPrinter[]> {
   return new Promise((resolve) => {
     const isWindows = process.platform === "win32";
 
-    // Windows：使用 PowerShell 取得印表機清單（優先 Get-Printer，失敗時改用 Win32_Printer）
+    // Windows：使用 PowerShell 取得印表機清單
     if (isWindows) {
       const psScript = `
         try {
@@ -327,7 +459,6 @@ export function listSystemPrinters(): Promise<SystemPrinter[]> {
     // macOS / Linux：沿用 lpstat
     execFile("lpstat", ["-p"], (err, stdout, stderr) => {
       if (err) {
-        // 若系統回報「沒有加入目標」或「No destinations added」，表示單純無印表機，不需報錯
         const isNoDestinations =
           stderr &&
           (stderr.includes("沒有加入目標") ||
@@ -345,7 +476,6 @@ export function listSystemPrinters(): Promise<SystemPrinter[]> {
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed.startsWith("printer ")) continue;
-        // 典型輸出: "printer EPSON_TM_T88V is idle.  enabled since ..."
         const parts = trimmed.split(/\s+/);
         const name = parts[1];
         const status = parts.slice(2).join(" ");
@@ -370,5 +500,3 @@ export function listSystemPrinters(): Promise<SystemPrinter[]> {
     });
   });
 }
-
-
