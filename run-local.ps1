@@ -6,6 +6,82 @@ $ErrorActionPreference = "Stop"
 $RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 #################################
+# Helper: Ensure npm dependencies are up to date
+#################################
+function Ensure-NpmDeps {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $ProjectDir,
+        [Parameter(Mandatory = $true)]
+        [string] $Label
+    )
+
+    if (-not (Test-Path $ProjectDir)) {
+        Write-Host ("[{0}] Skipping npm install: directory not found: {1}" -f $Label, $ProjectDir) -ForegroundColor Yellow
+        return
+    }
+
+    $lockFile    = Join-Path $ProjectDir "package-lock.json"
+    $pkgFile     = Join-Path $ProjectDir "package.json"
+    $hashFile    = Join-Path $ProjectDir ".deps-hash"
+    $nodeModules = Join-Path $ProjectDir "node_modules"
+
+    # Select dependency manifest file: prefer package-lock.json, fallback to package.json
+    $depFile = $null
+    if (Test-Path $lockFile) {
+        $depFile = $lockFile
+    }
+    elseif (Test-Path $pkgFile) {
+        $depFile = $pkgFile
+    }
+
+    $currentHash = ""
+    if ($depFile -ne $null -and (Test-Path $depFile)) {
+        $currentHash = (Get-FileHash $depFile -Algorithm SHA256).Hash
+    }
+
+    $storedHash = ""
+    if (Test-Path $hashFile) {
+        $storedHash = (Get-Content $hashFile -Raw).Trim()
+    }
+
+    $needInstall = $false
+
+    if (-not (Test-Path $nodeModules)) {
+        $needInstall = $true
+        Write-Host ("[{0}] node_modules not found; npm install required." -f $Label)
+    }
+    elseif ($currentHash -ne "" -and $currentHash -ne $storedHash) {
+        $needInstall = $true
+        Write-Host ("[{0}] Dependency manifest changed; npm install required." -f $Label)
+    }
+    else {
+        Write-Host ("[{0}] Dependencies up to date; skipping npm install." -f $Label)
+    }
+
+    if (-not $needInstall) {
+        return
+    }
+
+    Push-Location $ProjectDir
+    try {
+        Write-Host ("[{0}] Running npm install ..." -f $Label)
+        npm install
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm install failed in $ProjectDir"
+        }
+
+        if ($currentHash -ne "") {
+            Set-Content -Path $hashFile -Value $currentHash -Encoding ASCII
+        }
+        Write-Host ("[{0}] npm install completed." -f $Label)
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+#################################
 # 0. Safety: Check if ports 3000 / 4000 are already in use
 #################################
 function Test-PortInUse {
@@ -42,14 +118,7 @@ if (-not (Test-Path $backendDir)) {
     exit 1
 }
 
-Set-Location $backendDir
-
-if (-not (Test-Path "node_modules")) {
-    Write-Host "Installing backend dependencies (npm install) ..."
-    npm install
-} else {
-    Write-Host "Backend dependencies already installed. Skipping npm install."
-}
+Ensure-NpmDeps -ProjectDir $backendDir -Label "backend"
 
 #################################
 # 2. Prepare Frontend
@@ -62,14 +131,7 @@ if (-not (Test-Path $frontendDir)) {
     exit 1
 }
 
-Set-Location $frontendDir
-
-if (-not (Test-Path "node_modules")) {
-    Write-Host "Installing frontend dependencies (npm install) ..."
-    npm install
-} else {
-    Write-Host "Frontend dependencies already installed. Skipping npm install."
-}
+Ensure-NpmDeps -ProjectDir $frontendDir -Label "frontend"
 
 #################################
 # 3. Start Backend & Frontend dev servers
@@ -82,12 +144,12 @@ $backendProc  = $null
 $frontendProc = $null
 
 try {
-    # Backend powershell window
+    # Backend PowerShell window
     $backendProc = Start-Process -FilePath "powershell" `
         -ArgumentList "-NoExit", "-Command", "Set-Location `"$backendDir`"; npm run dev" `
         -PassThru
 
-    # Frontend powershell window
+    # Frontend PowerShell window
     $frontendProc = Start-Process -FilePath "powershell" `
         -ArgumentList "-NoExit", "-Command", "Set-Location `"$frontendDir`"; npm run dev" `
         -PassThru
@@ -142,8 +204,8 @@ try {
         Start-Sleep -Seconds 1
     }
 
-} finally {
-
+}
+finally {
     Write-Host ""
     Write-Host "Stopping dev servers..."
 
