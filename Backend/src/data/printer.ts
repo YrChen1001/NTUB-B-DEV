@@ -8,13 +8,12 @@ import { PrintJob, PrinterSettings } from "../models/types";
 
 const SETTINGS_ID = 1;
 
-const PAPER_HEIGHT_MM = 170;
+const PAPER_WIDTH_MM = 80;
 
 function normalizePaperWidthMm(value: unknown): number {
-  const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n)) return 80;
-  // 僅支援熱感紙常見寬度範圍，避免誤用 A4 之類尺寸
-  return Math.min(80, Math.max(58, Math.round(n)));
+  // 依需求：列印寬度固定 80mm（不提供 A4/其他尺寸）
+  void value;
+  return PAPER_WIDTH_MM;
 }
 
 // --- 票券排版（精美網頁版）---
@@ -26,26 +25,24 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
   const css = `
     @page {
       margin: 0;
-      size: ${widthMm}mm ${PAPER_HEIGHT_MM}mm;
+      size: ${widthMm}mm auto;
     }
     
     body {
       margin: 0;
       padding: 0;
       width: ${widthMm}mm;
-      height: ${PAPER_HEIGHT_MM}mm;
       box-sizing: border-box;
       background: #fff;
       color: #000;
-      overflow: hidden;
+      overflow: visible;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     }
 
     .ticket {
       width: ${widthMm}mm;
-      height: ${PAPER_HEIGHT_MM}mm;
       box-sizing: border-box;
-      padding: 8mm;
+      padding: 6mm;
       position: relative;
       display: flex;
       flex-direction: column;
@@ -68,7 +65,7 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
     }
 
     .category {
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 900;
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -96,7 +93,7 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
       color: #fff;
       padding: 2mm 4mm;
       border-radius: 9999px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
     }
 
@@ -106,7 +103,7 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
     }
 
     .title {
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 700;
       line-height: 1.15;
       margin: 0 0 2mm 0;
@@ -127,12 +124,12 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
       padding: 4mm;
       margin-bottom: 6mm;
       flex: 1;
-      overflow: hidden;
+      overflow: visible;
     }
 
     .content {
       margin: 0;
-      font-size: 12px;
+      font-size: 11px;
       line-height: 1.55;
       color: #1f2937;
       white-space: pre-wrap;
@@ -267,7 +264,7 @@ export function savePrinterSettings(partial: Partial<PrinterSettings>): PrinterS
 export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; message?: string }> {
   const settings = getPrinterSettings();
 
-  const paperWidthMm = normalizePaperWidthMm(settings.paperWidthMm ?? 80);
+  const paperWidthMm = normalizePaperWidthMm(settings.paperWidthMm ?? PAPER_WIDTH_MM);
 
   if (!settings.enabled) {
     return Promise.resolve({
@@ -305,16 +302,14 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
       if (isWindows) {
         // Windows: 截圖為 PNG（必須設定 viewport 寬度以確保排版正確）
         // 既有實作 80mm -> 320px（約 4px/mm），維持一致比例
-        const viewportWidth = Math.max(160, Math.round(paperWidthMm * 4));
-        const viewportHeight = Math.max(200, Math.round(PAPER_HEIGHT_MM * 4));
-        await page.setViewport({ width: viewportWidth, height: viewportHeight, deviceScaleFactor: 2 });
-        await page.screenshot({ path: outputPath, fullPage: false });
+        const viewportWidth = Math.round(PAPER_WIDTH_MM * 4);
+        await page.setViewport({ width: viewportWidth, height: 800, deviceScaleFactor: 2 });
+        await page.screenshot({ path: outputPath, fullPage: true });
       } else {
         // macOS / Linux: 產生 PDF
         await page.pdf({
           path: outputPath,
           width: `${paperWidthMm}mm`,
-          height: `${PAPER_HEIGHT_MM}mm`,
           printBackground: true,
           margin: { top: "0", right: "0", bottom: "0", left: "0" },
         });

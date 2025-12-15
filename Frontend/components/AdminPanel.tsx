@@ -606,22 +606,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <label className="block text-sm font-medium text-slate-700 mb-1">
                       紙張寬度（mm）
                     </label>
-                    <select
-                      className="w-40 p-2 border rounded bg-slate-50 disabled:bg-slate-100"
-                      value={String(printerSettings.paperWidthMm)}
-                      onChange={e =>
-                        setPrinterSettings({
-                          ...printerSettings,
-                          paperWidthMm: Number(e.target.value) || 80,
-                        })
-                      }
+                    <input
+                      className="w-40 p-2 border rounded bg-slate-100 text-slate-700"
+                      value="80（固定）"
+                      readOnly
                       disabled={!printerEnabled}
-                    >
-                      <option value="80">80（票籤設計：80×170mm）</option>
-                      <option value="58">58（較窄熱感紙）</option>
-                    </select>
+                    />
                     <p className="mt-1 text-[11px] text-slate-400">
-                      目前票籤版型高度固定為 170mm；僅支援熱感紙寬度 58/80。
+                      票籤列印寬度固定為 80mm；高度依內容自動延伸。
                     </p>
                   </div>
                 </div>
