@@ -57,9 +57,20 @@ export function initDb() {
       id INTEGER PRIMARY KEY CHECK (id = 1),
       printerName TEXT,
       copies INTEGER NOT NULL DEFAULT 1,
-      enabled INTEGER NOT NULL DEFAULT 0
+      enabled INTEGER NOT NULL DEFAULT 0,
+      paperWidthMm INTEGER NOT NULL DEFAULT 80
     )
   `).run();
+
+  // ---- 輕量 migration：舊 DB 可能沒有 paperWidthMm ----
+  // SQLite 沒有 ADD COLUMN IF NOT EXISTS，因此用 try/catch 忽略「已存在」錯誤。
+  try {
+    db.prepare(
+      `ALTER TABLE printer_settings ADD COLUMN paperWidthMm INTEGER NOT NULL DEFAULT 80`
+    ).run();
+  } catch {
+    // ignore
+  }
 
   // Seed/補齊預設資料（若不存在則插入，已存在則忽略）
   const insertCat = db.prepare(`

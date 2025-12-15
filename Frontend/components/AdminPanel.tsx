@@ -601,6 +601,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       例如：熱感紙機一次吐出 2 張票。
                     </p>
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      紙張寬度（mm）
+                    </label>
+                    <input
+                      type="number"
+                      min={40}
+                      max={210}
+                      className="w-28 p-2 border rounded bg-slate-50 disabled:bg-slate-100"
+                      value={printerSettings.paperWidthMm}
+                      onChange={e =>
+                        setPrinterSettings({
+                          ...printerSettings,
+                          paperWidthMm: Math.min(210, Math.max(40, Number(e.target.value) || 80)),
+                        })
+                      }
+                      disabled={!printerEnabled}
+                    />
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      常見：58（小票機）、80（熱感紙）。
+                    </p>
+                  </div>
                 </div>
 
                 <div className="flex flex-wrap gap-3">

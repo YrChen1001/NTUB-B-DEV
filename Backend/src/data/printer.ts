@@ -8,17 +8,25 @@ import { PrintJob, PrinterSettings } from "../models/types";
 
 const SETTINGS_ID = 1;
 
+function normalizePaperWidthMm(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return 80;
+  // 40mm ~ 210mm：涵蓋常見 58/80 熱感紙到 A4 寬度
+  return Math.min(210, Math.max(40, Math.round(n)));
+}
+
 // --- 票券排版（精美網頁版）---
-function generateHtml(job: PrintJob): string {
+function generateHtml(job: PrintJob, paperWidthMm: number): string {
   const qNumber = String(job.queueNumber).padStart(3, "0");
   const prettyTime = job.timestamp.replace("T", " ").slice(0, 16);
+  const widthMm = normalizePaperWidthMm(paperWidthMm);
   
   const css = `
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
     
     @page {
       margin: 0;
-      size: 80mm auto;
+      size: ${widthMm}mm auto;
     }
     
     body {
@@ -29,7 +37,7 @@ function generateHtml(job: PrintJob): string {
       line-height: 1.6;
       color: #333;
       background: #fff;
-      width: 80mm;
+      width: ${widthMm}mm;
       box-sizing: border-box;
       display: inline-block; /* 讓截圖寬度正確 */
     }
@@ -194,7 +202,7 @@ function generateHtml(job: PrintJob): string {
 export function getPrinterSettings(): PrinterSettings {
   const row = db
     .prepare(`
-      SELECT id, printerName, copies, enabled
+      SELECT id, printerName, copies, enabled, paperWidthMm
       FROM printer_settings
       WHERE id = ?
     `)
@@ -204,6 +212,7 @@ export function getPrinterSettings(): PrinterSettings {
         printerName: string | null;
         copies: number | null;
         enabled: number;
+        paperWidthMm?: number | null;
       }
     | undefined;
 
@@ -213,6 +222,7 @@ export function getPrinterSettings(): PrinterSettings {
       printerName: "",
       copies: 1,
       enabled: false,
+      paperWidthMm: 80,
     };
   }
 
@@ -221,6 +231,7 @@ export function getPrinterSettings(): PrinterSettings {
     printerName: row.printerName ?? "",
     copies: row.copies ?? 1,
     enabled: !!row.enabled,
+    paperWidthMm: normalizePaperWidthMm(row.paperWidthMm ?? 80),
   };
 }
 
@@ -231,22 +242,25 @@ export function savePrinterSettings(partial: Partial<PrinterSettings>): PrinterS
     printerName: partial.printerName ?? current.printerName,
     copies: partial.copies ?? current.copies,
     enabled: partial.enabled ?? current.enabled,
+    paperWidthMm: normalizePaperWidthMm(partial.paperWidthMm ?? current.paperWidthMm),
   };
 
   db.prepare(
     `
-    INSERT INTO printer_settings (id, printerName, copies, enabled)
-    VALUES (@id, @printerName, @copies, @enabled)
+    INSERT INTO printer_settings (id, printerName, copies, enabled, paperWidthMm)
+    VALUES (@id, @printerName, @copies, @enabled, @paperWidthMm)
     ON CONFLICT(id) DO UPDATE SET
       printerName = excluded.printerName,
       copies = excluded.copies,
-      enabled = excluded.enabled
+      enabled = excluded.enabled,
+      paperWidthMm = excluded.paperWidthMm
   `
   ).run({
     id: SETTINGS_ID,
     printerName: next.printerName,
     copies: next.copies,
     enabled: next.enabled ? 1 : 0,
+    paperWidthMm: next.paperWidthMm,
   });
 
   return next;
@@ -254,6 +268,8 @@ export function savePrinterSettings(partial: Partial<PrinterSettings>): PrinterS
 
 export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; message?: string }> {
   const settings = getPrinterSettings();
+
+  const paperWidthMm = normalizePaperWidthMm(settings.paperWidthMm ?? 80);
 
   if (!settings.enabled) {
     return Promise.resolve({
@@ -285,24 +301,26 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
       });
       const page = await browser.newPage();
       
-      const htmlContent = generateHtml(job);
+      const htmlContent = generateHtml(job, paperWidthMm);
       await page.setContent(htmlContent, { waitUntil: "networkidle0" });
 
       if (isWindows) {
         // Windows: 截圖為 PNG（必須設定 viewport 寬度以確保排版正確）
-        await page.setViewport({ width: 320, height: 800, deviceScaleFactor: 2 }); // 320px ~= 80mm
+        // 既有實作 80mm -> 320px（約 4px/mm），維持一致比例
+        const viewportWidth = Math.max(160, Math.round(paperWidthMm * 4));
+        await page.setViewport({ width: viewportWidth, height: 800, deviceScaleFactor: 2 });
         // 取得 body 的高度
         const bodyHandle = await page.$('body');
         const { height } = await bodyHandle!.boundingBox() as any;
         await bodyHandle!.dispose();
         
-        await page.setViewport({ width: 320, height: Math.ceil(height), deviceScaleFactor: 2 });
+        await page.setViewport({ width: viewportWidth, height: Math.ceil(height), deviceScaleFactor: 2 });
         await page.screenshot({ path: outputPath, fullPage: true });
       } else {
         // macOS / Linux: 產生 PDF
         await page.pdf({
           path: outputPath,
-          width: "80mm",
+          width: `${paperWidthMm}mm`,
           printBackground: true,
           margin: { top: "0", right: "0", bottom: "0", left: "0" },
         });

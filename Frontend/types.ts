@@ -30,6 +30,7 @@ export interface PrinterSettings {
   printerName: string;
   copies: number;
   enabled: boolean;
+  paperWidthMm: number;
 }
 
 export interface SystemPrinter {

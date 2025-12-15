@@ -9,16 +9,18 @@ router.get("/", (_req, res) => {
 });
 
 router.put("/", (req, res) => {
-  const { printerName, copies, enabled } = req.body as {
+  const { printerName, copies, enabled, paperWidthMm } = req.body as {
     printerName?: string;
     copies?: number;
     enabled?: boolean;
+    paperWidthMm?: number;
   };
 
   const next = savePrinterSettings({
     printerName,
     copies,
     enabled,
+    paperWidthMm,
   });
 
   res.json(next);
