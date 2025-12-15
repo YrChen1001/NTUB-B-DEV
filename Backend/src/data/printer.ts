@@ -9,9 +9,6 @@ import { PrintJob, PrinterSettings } from "../models/types";
 const SETTINGS_ID = 1;
 
 const PAPER_WIDTH_MM = 80;
-// 多數 80mm 熱感紙的實際可印寬度通常小於 80mm（常見約 72mm），
-// 內容區刻意縮窄可避免右側被裁切。
-const PRINTABLE_WIDTH_MM = 72;
 
 function normalizePaperWidthMm(value: unknown): number {
   // 依需求：列印寬度固定 80mm（不提供 A4/其他尺寸）
@@ -24,7 +21,6 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
   const qNumber = String(job.queueNumber).padStart(3, "0");
   const prettyTime = job.timestamp.replace("T", " ").slice(0, 16);
   const widthMm = normalizePaperWidthMm(paperWidthMm);
-  const contentWidthMm = Math.min(PRINTABLE_WIDTH_MM, widthMm);
   
   const css = `
     @page {
@@ -41,14 +37,13 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
       color: #000;
       overflow: visible;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      display: flex;
-      justify-content: center;
     }
 
     .ticket {
-      width: ${contentWidthMm}mm;
+      width: ${widthMm}mm;
       box-sizing: border-box;
-      padding: 6mm;
+      /* 留一點邊界避免硬體不可印邊，但不縮小整體寬度 */
+      padding: 4mm;
       position: relative;
       display: flex;
       flex-direction: column;
@@ -400,9 +395,9 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
           settings.printerName,
           "-n",
           String(settings.copies ?? 1),
-          // 讓 CUPS 依紙張寬度自動縮放，避免右側被裁切
+          // 避免 CUPS 自動縮放導致內容變很小
           "-o",
-          "fit-to-page",
+          "scaling=100",
           outputPath,
         ];
 
