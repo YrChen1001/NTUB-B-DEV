@@ -8,12 +8,11 @@ import { PrintJob, PrinterSettings } from "../models/types";
 
 const SETTINGS_ID = 1;
 
-const PAPER_WIDTH_MM = 80;
-
 function normalizePaperWidthMm(value: unknown): number {
-  // 依需求：列印寬度固定 80mm（不提供 A4/其他尺寸）
-  void value;
-  return PAPER_WIDTH_MM;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return 80;
+  // 40mm ~ 210mm：涵蓋常見 58/80 熱感紙到 A4 寬度
+  return Math.min(210, Math.max(40, Math.round(n)));
 }
 
 // --- 票券排版（精美網頁版）---
@@ -23,6 +22,8 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
   const widthMm = normalizePaperWidthMm(paperWidthMm);
   
   const css = `
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
+    
     @page {
       margin: 0;
       size: ${widthMm}mm auto;
@@ -30,134 +31,133 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
     
     body {
       margin: 0;
-      padding: 0;
-      width: ${widthMm}mm;
-      box-sizing: border-box;
+      padding: 0; /* 圖片截圖需要滿版 */
+      font-family: 'Noto Serif TC', serif;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #333;
       background: #fff;
-      color: #000;
-      overflow: visible;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      width: ${widthMm}mm;
+      max-width: ${widthMm}mm;
+      box-sizing: border-box;
+      margin: 0 auto;
+      display: inline-block; /* 讓截圖寬度正確 */
     }
 
-    .ticket {
-      width: ${widthMm}mm;
-      box-sizing: border-box;
-      /* 留一點邊界避免硬體不可印邊，但不縮小整體寬度 */
-      padding: 4mm;
-      position: relative;
+    .container {
       display: flex;
       flex-direction: column;
+      align-items: center;
+      border: 2px solid #333;
+      margin: 6px 0;
+      padding: 12px;
+      position: relative;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    .container::before {
+      content: "";
+      position: absolute;
+      top: 4px; left: 4px; right: 4px; bottom: 4px;
+      border: 1px solid #999;
+      pointer-events: none;
     }
 
     .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 6mm;
-      border-bottom: 2px solid #000;
-      padding-bottom: 4mm;
-    }
-
-    .sparkle {
-      width: 10px;
-      height: 10px;
-      opacity: 0.45;
-      color: #94a3b8;
-    }
-
-    .category {
-      font-size: 16px;
-      font-weight: 900;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
       text-align: center;
-      flex: 1;
-      margin: 0 6px;
-      overflow-wrap: anywhere;
-      word-break: break-word;
+      margin-bottom: 15px;
+      width: 100%;
+      border-bottom: 2px solid #333;
+      padding-bottom: 10px;
+    }
+
+    .brand {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      margin-bottom: 5px;
+    }
+
+    .sub-brand {
+      font-size: 10px;
+      text-transform: uppercase;
+      color: #666;
     }
 
     .meta {
-      text-align: center;
-      margin-bottom: 6mm;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      margin-bottom: 15px;
+      border-bottom: 1px dashed #ccc;
+      padding-bottom: 10px;
     }
 
-    .time {
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .meta-label {
       font-size: 10px;
-      color: #64748b;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      margin-bottom: 2mm;
+      color: #999;
     }
 
-    .badge {
-      display: inline-block;
-      background: #000;
-      color: #fff;
-      padding: 2mm 4mm;
-      border-radius: 9999px;
-      font-size: 11px;
+    .meta-value {
       font-weight: 700;
+      font-size: 14px;
     }
 
-    .titleBlock {
+    .title-section {
       text-align: center;
-      margin-bottom: 7mm;
+      margin-bottom: 20px;
     }
 
     .title {
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 700;
-      line-height: 1.15;
-      margin: 0 0 2mm 0;
+      margin-bottom: 5px;
     }
 
     .subtitle {
-      margin: 0;
       font-size: 12px;
       font-style: italic;
-      color: #475569;
-      font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
-    }
-
-    .contentBox {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 4mm;
-      margin-bottom: 6mm;
-      flex: 1;
-      overflow: visible;
+      color: #555;
     }
 
     .content {
-      margin: 0;
-      font-size: 11px;
-      line-height: 1.55;
-      color: #1f2937;
-      white-space: pre-wrap;
       text-align: justify;
-      overflow-wrap: anywhere;
+      margin-bottom: 25px;
+      white-space: pre-wrap;
+      width: 100%;
+      font-size: 13px;
       word-break: break-word;
+      overflow-wrap: break-word;
     }
 
     .footer {
       text-align: center;
       font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      color: #94a3b8;
-      text-transform: uppercase;
-      margin-top: 0;
+      color: #666;
+      border-top: 1px solid #333;
+      padding-top: 10px;
+      width: 100%;
     }
 
-    .bottomBar {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      height: 2mm;
-      background: #0f172a;
+    .footer-text {
+      margin-bottom: 5px;
+      font-weight: 700;
+    }
+    
+    .logo-text {
+      font-family: sans-serif;
+      font-size: 9px;
+      color: #aaa;
+      letter-spacing: 1px;
     }
   `;
 
@@ -169,30 +169,37 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
         <style>${css}</style>
       </head>
       <body>
-        <div class="ticket">
+        <div class="container">
           <div class="header">
-            <div class="sparkle">✦</div>
-            <div class="category">${job.categoryName}</div>
-            <div class="sparkle">✦</div>
+            <div class="brand">NTUB B-KIOSK</div>
+            <div class="sub-brand">Divine Guidance Ticket</div>
           </div>
-
+          
           <div class="meta">
-            <div class="time">${prettyTime}</div>
-            <div class="badge">#${qNumber}</div>
+            <div class="meta-item">
+              <span class="meta-label">NO.</span>
+              <span class="meta-value">${qNumber}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">CATEGORY</span>
+              <span class="meta-value">${job.categoryName}</span>
+            </div>
           </div>
 
-          <div class="titleBlock">
+          <div class="title-section">
             <div class="title">${job.item.title || "無標題"}</div>
-            ${job.item.subtitle ? `<p class="subtitle">${job.item.subtitle}</p>` : ""}
+            ${job.item.subtitle ? `<div class="subtitle">${job.item.subtitle}</div>` : ""}
           </div>
 
-          <div class="contentBox">
-            <p class="content">${job.item.content}</p>
+          <div class="content">
+            ${job.item.content}
           </div>
 
-          ${job.item.footer ? `<div class="footer">*** ${job.item.footer} ***</div>` : ""}
-
-          <div class="bottomBar"></div>
+          <div class="footer">
+            ${job.item.footer ? `<div class="footer-text">${job.item.footer}</div>` : ""}
+            <div class="logo-text">DESIGNED BY NTUB B-KIOSK</div>
+            <div style="font-size: 9px; margin-top: 4px; color: #ccc;">${prettyTime}</div>
+          </div>
         </div>
       </body>
     </html>
@@ -269,7 +276,7 @@ export function savePrinterSettings(partial: Partial<PrinterSettings>): PrinterS
 export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; message?: string }> {
   const settings = getPrinterSettings();
 
-  const paperWidthMm = normalizePaperWidthMm(settings.paperWidthMm ?? PAPER_WIDTH_MM);
+  const paperWidthMm = normalizePaperWidthMm(settings.paperWidthMm ?? 80);
 
   if (!settings.enabled) {
     return Promise.resolve({
@@ -307,8 +314,14 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
       if (isWindows) {
         // Windows: 截圖為 PNG（必須設定 viewport 寬度以確保排版正確）
         // 既有實作 80mm -> 320px（約 4px/mm），維持一致比例
-        const viewportWidth = Math.round(PAPER_WIDTH_MM * 4);
+        const viewportWidth = Math.max(160, Math.round(paperWidthMm * 4));
         await page.setViewport({ width: viewportWidth, height: 800, deviceScaleFactor: 2 });
+        // 取得 body 的高度
+        const bodyHandle = await page.$('body');
+        const { height } = await bodyHandle!.boundingBox() as any;
+        await bodyHandle!.dispose();
+        
+        await page.setViewport({ width: viewportWidth, height: Math.ceil(height), deviceScaleFactor: 2 });
         await page.screenshot({ path: outputPath, fullPage: true });
       } else {
         // macOS / Linux: 產生 PDF
@@ -316,7 +329,6 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
           path: outputPath,
           width: `${paperWidthMm}mm`,
           printBackground: true,
-          preferCSSPageSize: true,
           margin: { top: "0", right: "0", bottom: "0", left: "0" },
         });
       }
@@ -346,17 +358,12 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
             
             $img = [System.Drawing.Image]::FromFile('${imgPath}')
             
-            # 依可列印區自動縮放，避免內容超出紙張範圍被裁切
-            $scaleW = $e.MarginBounds.Width / $img.Width
-            $scaleH = $e.MarginBounds.Height / $img.Height
-            $scale = [Math]::Min($scaleW, $scaleH)
-            if ($scale -gt 1) { $scale = 1 }
-
-            $destW = [int]([Math]::Floor($img.Width * $scale))
-            $destH = [int]([Math]::Floor($img.Height * $scale))
-            $destX = $e.MarginBounds.Left
-            $destY = $e.MarginBounds.Top
-            $e.Graphics.DrawImage($img, $destX, $destY, $destW, $destH)
+            # 計算縮放（適應紙張寬度，保持比例）
+            # 這裡假設印表機已設定好紙張大小 (如 80mm)，通常不需要縮放，直接印原始大小即可
+            # 若需強制縮放，可計算 $e.MarginBounds.Width / $img.Width
+            
+            # 直接繪製圖片 (X=0, Y=0)
+            $e.Graphics.DrawImage($img, 0, 0, $img.Width, $img.Height)
             
             $img.Dispose()
             $e.HasMorePages = $false
@@ -395,9 +402,6 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
           settings.printerName,
           "-n",
           String(settings.copies ?? 1),
-          // 避免 CUPS 自動縮放導致內容變很小
-          "-o",
-          "scaling=100",
           outputPath,
         ];
 
