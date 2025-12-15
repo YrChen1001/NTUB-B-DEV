@@ -9,6 +9,9 @@ import { PrintJob, PrinterSettings } from "../models/types";
 const SETTINGS_ID = 1;
 
 const PAPER_WIDTH_MM = 80;
+// 多數 80mm 熱感紙的實際可印寬度通常小於 80mm（常見約 72mm），
+// 內容區刻意縮窄可避免右側被裁切。
+const PRINTABLE_WIDTH_MM = 72;
 
 function normalizePaperWidthMm(value: unknown): number {
   // 依需求：列印寬度固定 80mm（不提供 A4/其他尺寸）
@@ -21,6 +24,7 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
   const qNumber = String(job.queueNumber).padStart(3, "0");
   const prettyTime = job.timestamp.replace("T", " ").slice(0, 16);
   const widthMm = normalizePaperWidthMm(paperWidthMm);
+  const contentWidthMm = Math.min(PRINTABLE_WIDTH_MM, widthMm);
   
   const css = `
     @page {
@@ -37,10 +41,12 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
       color: #000;
       overflow: visible;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      display: flex;
+      justify-content: center;
     }
 
     .ticket {
-      width: ${widthMm}mm;
+      width: ${contentWidthMm}mm;
       box-sizing: border-box;
       padding: 6mm;
       position: relative;
@@ -72,6 +78,8 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
       text-align: center;
       flex: 1;
       margin: 0 6px;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .meta {
@@ -134,6 +142,8 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
       color: #1f2937;
       white-space: pre-wrap;
       text-align: justify;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .footer {
@@ -311,6 +321,7 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
           path: outputPath,
           width: `${paperWidthMm}mm`,
           printBackground: true,
+          preferCSSPageSize: true,
           margin: { top: "0", right: "0", bottom: "0", left: "0" },
         });
       }
@@ -340,12 +351,17 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
             
             $img = [System.Drawing.Image]::FromFile('${imgPath}')
             
-            # 計算縮放（適應紙張寬度，保持比例）
-            # 這裡假設印表機已設定好紙張大小 (如 80mm)，通常不需要縮放，直接印原始大小即可
-            # 若需強制縮放，可計算 $e.MarginBounds.Width / $img.Width
-            
-            # 直接繪製圖片 (X=0, Y=0)
-            $e.Graphics.DrawImage($img, 0, 0, $img.Width, $img.Height)
+            # 依可列印區自動縮放，避免內容超出紙張範圍被裁切
+            $scaleW = $e.MarginBounds.Width / $img.Width
+            $scaleH = $e.MarginBounds.Height / $img.Height
+            $scale = [Math]::Min($scaleW, $scaleH)
+            if ($scale -gt 1) { $scale = 1 }
+
+            $destW = [int]([Math]::Floor($img.Width * $scale))
+            $destH = [int]([Math]::Floor($img.Height * $scale))
+            $destX = $e.MarginBounds.Left
+            $destY = $e.MarginBounds.Top
+            $e.Graphics.DrawImage($img, $destX, $destY, $destW, $destH)
             
             $img.Dispose()
             $e.HasMorePages = $false
@@ -384,6 +400,9 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
           settings.printerName,
           "-n",
           String(settings.copies ?? 1),
+          // 讓 CUPS 依紙張寬度自動縮放，避免右側被裁切
+          "-o",
+          "fit-to-page",
           outputPath,
         ];
 
