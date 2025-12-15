@@ -8,11 +8,13 @@ import { PrintJob, PrinterSettings } from "../models/types";
 
 const SETTINGS_ID = 1;
 
+const PAPER_HEIGHT_MM = 170;
+
 function normalizePaperWidthMm(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return 80;
-  // 40mm ~ 210mm：涵蓋常見 58/80 熱感紙到 A4 寬度
-  return Math.min(210, Math.max(40, Math.round(n)));
+  // 僅支援熱感紙常見寬度範圍，避免誤用 A4 之類尺寸
+  return Math.min(80, Math.max(58, Math.round(n)));
 }
 
 // --- 票券排版（精美網頁版）---
@@ -22,135 +24,138 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
   const widthMm = normalizePaperWidthMm(paperWidthMm);
   
   const css = `
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
-    
     @page {
       margin: 0;
-      size: ${widthMm}mm auto;
+      size: ${widthMm}mm ${PAPER_HEIGHT_MM}mm;
     }
     
     body {
       margin: 0;
-      padding: 0; /* 圖片截圖需要滿版 */
-      font-family: 'Noto Serif TC', serif;
-      font-size: 14px;
-      line-height: 1.6;
-      color: #333;
-      background: #fff;
+      padding: 0;
       width: ${widthMm}mm;
+      height: ${PAPER_HEIGHT_MM}mm;
       box-sizing: border-box;
-      display: inline-block; /* 讓截圖寬度正確 */
+      background: #fff;
+      color: #000;
+      overflow: hidden;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     }
 
-    .container {
+    .ticket {
+      width: ${widthMm}mm;
+      height: ${PAPER_HEIGHT_MM}mm;
+      box-sizing: border-box;
+      padding: 8mm;
+      position: relative;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      border: 2px solid #333;
-      margin: 10px;
-      padding: 15px;
-      position: relative;
-    }
-
-    .container::before {
-      content: "";
-      position: absolute;
-      top: 4px; left: 4px; right: 4px; bottom: 4px;
-      border: 1px solid #999;
-      pointer-events: none;
     }
 
     .header {
-      text-align: center;
-      margin-bottom: 15px;
-      width: 100%;
-      border-bottom: 2px solid #333;
-      padding-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6mm;
+      border-bottom: 2px solid #000;
+      padding-bottom: 4mm;
     }
 
-    .brand {
+    .sparkle {
+      width: 10px;
+      height: 10px;
+      opacity: 0.45;
+      color: #94a3b8;
+    }
+
+    .category {
       font-size: 18px;
-      font-weight: 700;
-      letter-spacing: 2px;
-      margin-bottom: 5px;
-    }
-
-    .sub-brand {
-      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
-      color: #666;
+      text-align: center;
+      flex: 1;
+      margin: 0 6px;
     }
 
     .meta {
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
-      font-size: 12px;
-      margin-bottom: 15px;
-      border-bottom: 1px dashed #ccc;
-      padding-bottom: 10px;
-    }
-
-    .meta-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    .meta-label {
-      font-size: 10px;
-      color: #999;
-    }
-
-    .meta-value {
-      font-weight: 700;
-      font-size: 14px;
-    }
-
-    .title-section {
       text-align: center;
-      margin-bottom: 20px;
+      margin-bottom: 6mm;
+    }
+
+    .time {
+      font-size: 10px;
+      color: #64748b;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 2mm;
+    }
+
+    .badge {
+      display: inline-block;
+      background: #000;
+      color: #fff;
+      padding: 2mm 4mm;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .titleBlock {
+      text-align: center;
+      margin-bottom: 7mm;
     }
 
     .title {
       font-size: 20px;
       font-weight: 700;
-      margin-bottom: 5px;
+      line-height: 1.15;
+      margin: 0 0 2mm 0;
     }
 
     .subtitle {
+      margin: 0;
       font-size: 12px;
       font-style: italic;
-      color: #555;
+      color: #475569;
+      font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+    }
+
+    .contentBox {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 4mm;
+      margin-bottom: 6mm;
+      flex: 1;
+      overflow: hidden;
     }
 
     .content {
-      text-align: justify;
-      margin-bottom: 25px;
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.55;
+      color: #1f2937;
       white-space: pre-wrap;
-      width: 100%;
-      font-size: 13px;
+      text-align: justify;
     }
 
     .footer {
       text-align: center;
       font-size: 10px;
-      color: #666;
-      border-top: 1px solid #333;
-      padding-top: 10px;
-      width: 100%;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #94a3b8;
+      text-transform: uppercase;
+      margin-top: 0;
     }
 
-    .footer-text {
-      margin-bottom: 5px;
-      font-weight: 700;
-    }
-    
-    .logo-text {
-      font-family: sans-serif;
-      font-size: 9px;
-      color: #aaa;
-      letter-spacing: 1px;
+    .bottomBar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 2mm;
+      background: #0f172a;
     }
   `;
 
@@ -162,37 +167,30 @@ function generateHtml(job: PrintJob, paperWidthMm: number): string {
         <style>${css}</style>
       </head>
       <body>
-        <div class="container">
+        <div class="ticket">
           <div class="header">
-            <div class="brand">NTUB B-KIOSK</div>
-            <div class="sub-brand">Divine Guidance Ticket</div>
+            <div class="sparkle">✦</div>
+            <div class="category">${job.categoryName}</div>
+            <div class="sparkle">✦</div>
           </div>
-          
+
           <div class="meta">
-            <div class="meta-item">
-              <span class="meta-label">NO.</span>
-              <span class="meta-value">${qNumber}</span>
-            </div>
-            <div class="meta-item">
-              <span class="meta-label">CATEGORY</span>
-              <span class="meta-value">${job.categoryName}</span>
-            </div>
+            <div class="time">${prettyTime}</div>
+            <div class="badge">#${qNumber}</div>
           </div>
 
-          <div class="title-section">
+          <div class="titleBlock">
             <div class="title">${job.item.title || "無標題"}</div>
-            ${job.item.subtitle ? `<div class="subtitle">${job.item.subtitle}</div>` : ""}
+            ${job.item.subtitle ? `<p class="subtitle">${job.item.subtitle}</p>` : ""}
           </div>
 
-          <div class="content">
-            ${job.item.content}
+          <div class="contentBox">
+            <p class="content">${job.item.content}</p>
           </div>
 
-          <div class="footer">
-            ${job.item.footer ? `<div class="footer-text">${job.item.footer}</div>` : ""}
-            <div class="logo-text">DESIGNED BY NTUB B-KIOSK</div>
-            <div style="font-size: 9px; margin-top: 4px; color: #ccc;">${prettyTime}</div>
-          </div>
+          ${job.item.footer ? `<div class="footer">*** ${job.item.footer} ***</div>` : ""}
+
+          <div class="bottomBar"></div>
         </div>
       </body>
     </html>
@@ -308,19 +306,15 @@ export function sendToPrinter(job: PrintJob): Promise<{ success: boolean; messag
         // Windows: 截圖為 PNG（必須設定 viewport 寬度以確保排版正確）
         // 既有實作 80mm -> 320px（約 4px/mm），維持一致比例
         const viewportWidth = Math.max(160, Math.round(paperWidthMm * 4));
-        await page.setViewport({ width: viewportWidth, height: 800, deviceScaleFactor: 2 });
-        // 取得 body 的高度
-        const bodyHandle = await page.$('body');
-        const { height } = await bodyHandle!.boundingBox() as any;
-        await bodyHandle!.dispose();
-        
-        await page.setViewport({ width: viewportWidth, height: Math.ceil(height), deviceScaleFactor: 2 });
-        await page.screenshot({ path: outputPath, fullPage: true });
+        const viewportHeight = Math.max(200, Math.round(PAPER_HEIGHT_MM * 4));
+        await page.setViewport({ width: viewportWidth, height: viewportHeight, deviceScaleFactor: 2 });
+        await page.screenshot({ path: outputPath, fullPage: false });
       } else {
         // macOS / Linux: 產生 PDF
         await page.pdf({
           path: outputPath,
           width: `${paperWidthMm}mm`,
+          height: `${PAPER_HEIGHT_MM}mm`,
           printBackground: true,
           margin: { top: "0", right: "0", bottom: "0", left: "0" },
         });
